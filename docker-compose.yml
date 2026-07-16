@@ -1,0 +1,132 @@
+services:
+  # --- PHP-FPM: corre la aplicación Laravel (HTTP) ---
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: gym_app
+    restart: unless-stopped
+    working_dir: /var/www
+    environment:
+      CONTAINER_ROLE: app
+      DB_HOST: postgres
+      DB_PORT: 5432
+    volumes:
+      - ./:/var/www
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan migrate:status >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 40s
+    networks:
+      - gym
+
+  # --- Nginx: servidor web que reenvía a PHP-FPM ---
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: gym_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    networks:
+      - gym
+
+  # --- PostgreSQL: modelo de escritura (access_logs, outbox, phrases) + read model ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: gym_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-gym}
+      POSTGRES_USER: ${DB_USERNAME:-gym}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-gym} -d ${DB_DATABASE:-gym}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gym
+
+  # --- RabbitMQ: broker de eventos de dominio (con panel de gestión) ---
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: gym_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"    # protocolo AMQP
+      - "15672:15672"  # panel web http://localhost:15672
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gym
+
+  # --- Worker Engagement: consume el evento CheckedIn, integra la API externa y proyecta ---
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: gym_worker
+    restart: unless-stopped
+    working_dir: /var/www
+    command: php artisan engagement:consume
+    environment:
+      CONTAINER_ROLE: worker
+      DB_HOST: postgres
+      DB_PORT: 5432
+    volumes:
+      - ./:/var/www
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - gym
+
+  # --- Relay del Outbox: publica al broker los eventos persistidos en la transacción del check-in ---
+  relay:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: gym_relay
+    restart: unless-stopped
+    working_dir: /var/www
+    command: php artisan outbox:relay
+    environment:
+      CONTAINER_ROLE: relay
+      DB_HOST: postgres
+      DB_PORT: 5432
+    volumes:
+      - ./:/var/www
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - gym
+
+volumes:
+  pgdata:
+
+networks:
+  gym:
+    driver: bridge
