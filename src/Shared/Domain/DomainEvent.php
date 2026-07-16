@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Shared\Domain;
 
-use Illuminate\Support\Str;
-
 /**
  * Clase base de todos los eventos de dominio.
  *
@@ -42,11 +40,11 @@ abstract class DomainEvent
 
     public static function nextId(): string
     {
-        return (string) Str::uuid();
+        return Uuid::generate();
     }
 
     public static function now(): string
     {
-        return now()->toIso8601String();
+        return (new \DateTimeImmutable())->format(DATE_ATOM);
     }
 }

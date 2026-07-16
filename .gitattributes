@@ -1,0 +1,10 @@
+# Fuerza saltos de línea LF, sin importar el sistema operativo de quien clona.
+#
+# Por qué: docker/php/entrypoint.sh corre DENTRO de un contenedor Linux. Si
+# Git lo convierte a CRLF al hacer checkout (comportamiento por defecto de
+# `core.autocrlf=true` en Windows), el shebang `#!/bin/sh` queda con un
+# retorno de carro al final y el contenedor falla con un error de intérprete
+# no encontrado, incluso con el código fuente intacto.
+* text=auto eol=lf
+
+*.sh text eol=lf

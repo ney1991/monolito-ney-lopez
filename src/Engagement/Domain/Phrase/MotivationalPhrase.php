@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Engagement\Domain\Phrase;
 
 use App\Engagement\Domain\Quote\Quote;
-use Illuminate\Support\Str;
+use App\Shared\Domain\Uuid;
 
 /**
  * Entidad del dominio Engagement: la frase asignada a un usuario tras un acceso.
@@ -25,7 +25,7 @@ final class MotivationalPhrase
     public static function assign(string $userId, string $accessLogId, Quote $quote, string $checkedInAt): self
     {
         return new self(
-            id: (string) Str::uuid(),
+            id: Uuid::generate(),
             userId: $userId,
             accessLogId: $accessLogId,
             quote: $quote,

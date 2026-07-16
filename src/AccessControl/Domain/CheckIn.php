@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\AccessControl\Domain;
 
 use App\Shared\Domain\DomainEvent;
-use Illuminate\Support\Str;
+use App\Shared\Domain\Uuid;
 
 /**
  * Aggregate Root del contexto AccessControl: un registro de acceso físico.
@@ -38,10 +38,10 @@ final class CheckIn
     public static function register(string $userId, string $branchId, ?string $idempotencyKey = null): self
     {
         $checkIn = new self(
-            id: (string) Str::uuid(),
+            id: Uuid::generate(),
             userId: $userId,
             branchId: $branchId,
-            checkedInAt: now()->toIso8601String(),
+            checkedInAt: (new \DateTimeImmutable())->format(DATE_ATOM),
             idempotencyKey: $idempotencyKey,
         );
 
