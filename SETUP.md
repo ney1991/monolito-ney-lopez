@@ -2,7 +2,7 @@
 
 Guía para quien recibe el repositorio y solo quiere levantarlo y probarlo — sin
 necesitar el contexto completo de arquitectura (eso está en
-[ARCHITECTURE.md](ARCHITECTURE.md) y [README.md](README.md)).
+[ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ## Requisito único
 
@@ -94,9 +94,10 @@ Respuesta esperada (HTTP 200), ya con la frase asignada:
 docker compose exec app ./vendor/bin/phpunit --testdox
 ```
 
-Deberías ver 7 tests en verde: prueban el adaptador de la API externa (timeouts,
-errores 500, cambios de contrato JSON) y la lógica del caso de uso, sin red ni
-base de datos reales.
+Deberías ver 11 tests en verde: prueban el adaptador de la API externa (timeouts,
+errores 500, cambios de contrato JSON), la lógica del caso de uso de Engagement,
+y la idempotencia del check-in (incluyendo condiciones de carrera) — todo sin
+red ni base de datos reales.
 
 ## 5. (Opcional) Ver el broker de mensajería en vivo
 
@@ -143,5 +144,6 @@ de `.env`, `APP_KEY` y las migraciones automáticamente.
 - **La frase no aparece en el dashboard tras varios segundos:** revisa
   `docker compose logs worker --tail=30` — si la API externa
   (`dummyjson.com`) está lenta o caída, el sistema reintenta y finalmente manda
-  el evento a la Dead Letter Queue (comportamiento esperado, ver
-  [README.md](README.md) sección 8).
+  el evento a la Dead Letter Queue (comportamiento esperado: reintentos con
+  backoff y luego Dead Letter Exchange, ver [ARCHITECTURE.md](ARCHITECTURE.md)
+  sección 6).
