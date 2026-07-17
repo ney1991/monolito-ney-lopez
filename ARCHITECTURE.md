@@ -174,14 +174,22 @@ separados, una micro-caída del broker entre ambos produce **accesos fantasma**
 
 ```
 RegisterCheckInHandler:
-  DB::transaction:
+  TransactionManager.run(closure):     ← puerto; el adaptador real delega en DB::transaction()
      1. INSERT access_logs        (hecho de negocio)
      2. INSERT outbox (CheckedIn) (intención de publicar)
   commit  ← ambos o ninguno (misma transacción ACID de PostgreSQL)
 
-Relay (proceso aparte, "outbox:publish"):
+Relay (proceso aparte, "outbox:relay"):
   lee filas outbox no publicadas → publica en RabbitMQ → marca published_at
 ```
+
+> Nota de implementación: `RegisterCheckInHandler` no llama a la fachada
+> `DB::transaction()` de Laravel directamente — depende de un puerto
+> `TransactionManager` (interfaz), cuyo adaptador real (`DbTransactionManager`)
+> sí usa `DB::transaction()` internamente. Este puerto adicional existe para que
+> el handler se pueda testear con un doble en memoria que simplemente ejecuta el
+> callback, sin arrancar una base de datos real (ver
+> [`RegisterCheckInHandlerTest.php`](tests/Unit/RegisterCheckInHandlerTest.php)).
 
 - El acceso físico y el registro del evento son **atómicos**: nunca hay acceso sin
   su evento pendiente.
@@ -294,14 +302,17 @@ Se abandona la estructura MVC por defecto de Laravel. El directorio `src/` refle
 ```
 src/
 ├── Shared/
-│   ├── Domain/                 # DomainEvent (base), EventBus (interfaz/puerto)
+│   ├── Domain/                 # DomainEvent (base), EventBus (puerto), TransactionManager (puerto),
+│   │                           # Uuid (generador nativo de UUID v4, sin dependencias)
 │   └── Infrastructure/
 │       ├── DomainServiceProvider   # cablea TODOS los puertos con sus adaptadores
 │       ├── Outbox/                 # OutboxEventBus (implementa EventBus), OutboxModel, OutboxRelayCommand
-│       └── RabbitMq/                # RabbitMqConnection (topología+DLX), RabbitMqPublisher
+│       ├── RabbitMq/                # RabbitMqConnection (topología+DLX), RabbitMqPublisher
+│       └── Database/                # DbTransactionManager (adaptador real de TransactionManager)
 │
 ├── AccessControl/
-│   ├── Domain/                 # CheckIn (entidad), CheckedIn (evento), AccessLogRepository (puerto)
+│   ├── Domain/                 # CheckIn (entidad), CheckedIn (evento), AccessLogRepository (puerto),
+│   │                           # DuplicateIdempotencyKey (excepción de dominio, ver §4.1)
 │   ├── Application/            # RegisterCheckInCommand + Handler
 │   └── Infrastructure/         # CheckInController, EloquentAccessLogRepository
 │
